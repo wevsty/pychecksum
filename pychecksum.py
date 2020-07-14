@@ -125,19 +125,16 @@ class CheckFile:
 
 class CheckSumFile:
 
-    def __init__(self):
-        self.checksum_item_buffer = list()
-
-    @classmethod
-    def create_checksum_item(cls, hash_algorithm_name: str, file_path: str) -> CheckFile:
+    @staticmethod
+    def create_checksum_item(hash_algorithm_name: str, file_path: str) -> CheckFile:
         item = CheckFile()
         hash_hex = item.calc_file_hash(hash_algorithm_name, file_path)
         item.set_file_hash(hash_hex)
         item.set_file_path(file_path)
         return item
 
-    @classmethod
-    def load_checksum_file(cls, checksum_item_buffer: list, checksum_file_path: str) -> None:
+    @staticmethod
+    def load_checksum_file(checksum_item_buffer: list, checksum_file_path: str) -> None:
         # lines = list()
         UTF8_BOM_LEN = len(codecs.BOM_UTF8)
         with open(checksum_file_path, "rb") as fp:
@@ -158,8 +155,8 @@ class CheckSumFile:
             checksum_item_buffer.append(check_file_object)
         pass
 
-    @classmethod
-    def write_checksum_file(cls, checksum_item_buffer: list, checksum_file_path: str) -> None:
+    @staticmethod
+    def write_checksum_file(checksum_item_buffer: list, checksum_file_path: str) -> None:
         if len(checksum_item_buffer) == 0:
             return
         if len(checksum_file_path) == 0:
@@ -339,9 +336,9 @@ optional arguments:
 --output                        The output file name(default: CHECKSUM.SHA1)
 
 example:
-pychecksum.py --verify_checksum_for_dir D:\test_data
 pychecksum.py --create_checksum_for_dir D:\test_data
 pychecksum.py --create_checksum_for_dir --recursion=false D:\test_data
+pychecksum.py --verify_checksum_for_dir D:\test_data
 pychecksum.py --verify_checksum D:\test_data\CHECKSUM.SHA1
     '''
     print(help_string)
@@ -395,5 +392,8 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    main()
-    pass
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("User exit.")
+    exit(0)
