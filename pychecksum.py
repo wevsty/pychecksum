@@ -39,6 +39,17 @@ def enum_paths(
     return
 
 
+def ensure_folder(dir_path):
+    try:
+        if os.path.exists(dir_path) is True:
+            return
+        os.makedirs(dir_path)
+    except OSError:
+        pass
+    finally:
+        pass
+
+
 class CheckFile:
 
     def __init__(self):
@@ -194,6 +205,13 @@ class CheckSumFile:
             return True
         return False
 
+    @staticmethod
+    def expand_relative_path(base_path: str, filename: str):
+        if os.path.isabs(filename) is True:
+            return filename
+        abs_path = os.path.join(base_path, filename)
+        return abs_path
+
     @classmethod
     def display_path_checksum(
             cls,
@@ -224,49 +242,9 @@ class CheckSumFile:
         pass
 
     @classmethod
-    def create_checksum_file_for_dir(
-            cls,
-            dir_path: str,
-            hash_algorithm_name: str = 'SHA1',
-            checksum_file_path: str = 'CHECKSUM.SHA1',
-            recursion=False
-    ) -> None:
-        checksum_item_list = list()
-        file_path_list = list()
-        enum_paths(
-            file_path_list,
-            dir_path,
-            include_file=True,
-            include_dir=True,
-            recursion=False
-        )
-        for path in file_path_list:
-            # 跳过checksum文件
-            if cls.is_checksum_file(path) is True:
-                continue
-            if os.path.isdir(path):
-                if recursion is True:
-                    cls.create_checksum_file_for_dir(path, hash_algorithm_name, checksum_file_path, recursion)
-                else:
-                    pass
-            elif os.path.isfile(path):
-                item_object = cls.create_checksum_item(hash_algorithm_name, path)
-                checksum_item_list.append(item_object)
-            else:
-                pass
-        if os.path.isabs(checksum_file_path) is True:
-            pass
-        else:
-            checksum_file_path = os.path.join(dir_path, checksum_file_path)
-        if len(checksum_item_list) > 0:
-            cls.write_checksum_file(checksum_item_list, checksum_file_path)
-            print('Create CHECKSUM : %s' % checksum_file_path)
-        pass
-
-    @classmethod
     def verify_checksum_file(
             cls,
-            checksum_file_path,
+            checksum_file_path: str,
             hash_algorithm_name: str = 'SHA1'
     ) -> None:
         print('Verify CHECKSUM file: %s' % checksum_file_path)
@@ -295,7 +273,7 @@ class CheckSumFile:
     @classmethod
     def verify_checksum_file_for_dir(
             cls,
-            dir_path,
+            dir_path: str,
             hash_algorithm_name: str = 'SHA1',
             checksum_file_name: str = 'CHECKSUM.SHA1',
             recursion=True
@@ -310,11 +288,116 @@ class CheckSumFile:
             recursion=recursion
         )
         for find_path in dir_path_list:
-            checksum_file_path = os.path.join(find_path, checksum_file_name)
+            checksum_file_path = cls.expand_relative_path(find_path, checksum_file_name)
             if os.path.exists(checksum_file_path) is True:
                 if os.path.isfile(checksum_file_path) is True:
                     cls.verify_checksum_file(checksum_file_path, hash_algorithm_name)
                 pass
+            pass
+        pass
+
+    @classmethod
+    def create_checksum_file_for_dir(
+            cls,
+            dir_path: str,
+            hash_algorithm_name: str = 'SHA1',
+            checksum_file_name: str = 'CHECKSUM.SHA1',
+            recursion=False
+    ) -> None:
+        checksum_item_list = list()
+        file_path_list = list()
+        enum_paths(
+            file_path_list,
+            dir_path,
+            include_file=True,
+            include_dir=True,
+            recursion=False
+        )
+        for path in file_path_list:
+            # 跳过checksum文件
+            if cls.is_checksum_file(path) is True:
+                continue
+            if os.path.isdir(path):
+                if recursion is True:
+                    cls.create_checksum_file_for_dir(path, hash_algorithm_name, checksum_file_name, recursion)
+                else:
+                    pass
+            elif os.path.isfile(path):
+                item_object = cls.create_checksum_item(hash_algorithm_name, path)
+                checksum_item_list.append(item_object)
+            else:
+                pass
+        checksum_file_path = cls.expand_relative_path(dir_path, checksum_file_name)
+        if len(checksum_item_list) > 0:
+            cls.write_checksum_file(checksum_item_list, checksum_file_path)
+            print('Create CHECKSUM : %s' % checksum_file_path)
+        pass
+
+    @classmethod
+    def select_file_from_dir(
+            cls,
+            src_dir_path: str,
+            checksum_file_name: str = 'CHECKSUM.SHA1',
+    ) -> None:
+        src_base_path = os.path.abspath(src_dir_path)
+        dst_base_path = os.path.join(src_base_path, 'selected')
+        ensure_folder(dst_base_path)
+        checksum_file_path = cls.expand_relative_path(src_base_path, checksum_file_name)
+        checksum_item_list = list()
+        cls.load_checksum_file(checksum_item_list, checksum_file_path)
+        for item_object in checksum_item_list:
+            file_name = item_object.get_file_name()
+            file_path = item_object.get_file_path()
+            # hash_log = item_object.get_file_hash()
+            if os.path.isabs(file_path) is True:
+                full_path = file_path
+            else:
+                full_path = os.path.join(src_base_path, file_path)
+            if os.path.isfile(full_path) is False:
+                print('File does not exist : %s' % file_name)
+                continue
+            new_file_path = os.path.join(dst_base_path, file_name)
+            try:
+                print('Select : %s' % file_name)
+                os.rename(full_path, new_file_path)
+            except OSError:
+                print('Move failed : %s' % file_name)
+            pass
+        pass
+
+    @classmethod
+    def select_mismatch_from_dir(
+            cls,
+            src_dir_path: str,
+            hash_algorithm_name: str = 'SHA1',
+            checksum_file_name: str = 'CHECKSUM.SHA1',
+    ) -> None:
+        src_base_path = os.path.abspath(src_dir_path)
+        dst_base_path = os.path.join(src_base_path, 'check_failed')
+        ensure_folder(dst_base_path)
+        checksum_file_path = cls.expand_relative_path(src_base_path, checksum_file_name)
+        checksum_item_list = list()
+        cls.load_checksum_file(checksum_item_list, checksum_file_path)
+        for item_object in checksum_item_list:
+            file_name = item_object.get_file_name()
+            file_path = item_object.get_file_path()
+            hash_log = item_object.get_file_hash()
+            if os.path.isabs(file_path) is True:
+                full_path = file_path
+            else:
+                full_path = os.path.join(src_base_path, file_path)
+            if os.path.isfile(full_path) is False:
+                print('File does not exist : %s' % file_name)
+                continue
+            current_hash = CheckFile.calc_file_hash(hash_algorithm_name, full_path)
+            if current_hash == hash_log:
+                continue
+            new_file_path = os.path.join(dst_base_path, file_name)
+            try:
+                print('Select : %s' % file_name)
+                os.rename(full_path, new_file_path)
+            except OSError:
+                print('Move failed : %s' % file_name)
             pass
         pass
 
@@ -331,15 +414,19 @@ optional arguments:
 --create_checksum_for_dir       Create checksum for folders
 --verify_checksum_for_dir       Verify checksum for folders
 --verify_checksum_file          Verify checksum files
+--select_file_from_dir          Select checksum files
+--select_mismatch_from_dir      Select mismatch files
 --recursion                     Recursive folder(default: True)
 --algorithm                     Hash algorithm(default: SHA1)
---output                        The output file name(default: CHECKSUM.SHA1)
+--filename                      Checksum file name(default: CHECKSUM.SHA1)
 
 example:
 pychecksum.py --create_checksum_for_dir D:\test_data
 pychecksum.py --create_checksum_for_dir --recursion=false D:\test_data
 pychecksum.py --verify_checksum_for_dir D:\test_data
 pychecksum.py --verify_checksum D:\test_data\CHECKSUM.SHA1
+pychecksum.py --select_file_from_dir D:\test_data
+pychecksum.py --select_mismatch_from_dir D:\test_data
     '''
     print(help_string)
     exit(0)
@@ -350,11 +437,13 @@ def main() -> None:
 
     parser.add_argument("paths", type=str, nargs='*')
     parser.add_argument('--create_checksum_for_dir', default=False, action='store_true')
-    parser.add_argument('--verify_checksum', default=False, action='store_true')
     parser.add_argument('--verify_checksum_for_dir', default=False, action='store_true')
+    parser.add_argument('--verify_checksum', default=False, action='store_true')
+    parser.add_argument('--select_file_from_dir', default=False, action='store_true')
+    parser.add_argument('--select_mismatch_from_dir', default=False, action='store_true')
     parser.add_argument('--recursion', type=bool, default=True)
     parser.add_argument("--algorithm", type=str, default='SHA1')
-    parser.add_argument("--output", type=str, default='CHECKSUM.SHA1')
+    parser.add_argument("--filename", type=str, default='CHECKSUM.SHA1')
     parser.add_argument('-h', '--help', action='store_true')
     args = parser.parse_args()
 
@@ -365,13 +454,13 @@ def main() -> None:
         if args.create_checksum_for_dir is True:
             for path in args.paths:
                 if os.path.isdir(path) is True:
-                    CheckSumFile.create_checksum_file_for_dir(path, args.algorithm, args.output, args.recursion)
+                    CheckSumFile.create_checksum_file_for_dir(path, args.algorithm, args.filename, args.recursion)
                 else:
                     print('Invalid folder path : %s' % path)
         elif args.verify_checksum_for_dir is True:
             for path in args.paths:
                 if os.path.isdir(path) is True:
-                    CheckSumFile.verify_checksum_file_for_dir(path, args.algorithm, args.output, args.recursion)
+                    CheckSumFile.verify_checksum_file_for_dir(path, args.algorithm, args.filename, args.recursion)
                 else:
                     print('Invalid folder path : %s' % path)
         elif args.verify_checksum is True:
@@ -380,6 +469,18 @@ def main() -> None:
                     CheckSumFile.verify_checksum_file(path, args.algorithm)
                 else:
                     print('Invalid file path : %s' % path)
+        elif args.select_file_from_dir is True:
+            for path in args.paths:
+                if os.path.isdir(path) is True:
+                    CheckSumFile.select_file_from_dir(path, args.filename)
+                else:
+                    print('Invalid folder path : %s' % path)
+        elif args.select_mismatch_from_dir is True:
+            for path in args.paths:
+                if os.path.isdir(path) is True:
+                    CheckSumFile.select_mismatch_from_dir(path, args.algorithm, args.filename)
+                else:
+                    print('Invalid folder path : %s' % path)
         else:
             for path in args.paths:
                 if os.path.isfile(path) is True:
